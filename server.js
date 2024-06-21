@@ -33,6 +33,9 @@ app.post('/api/contact', (req, res) => {
         res.status(200).send('Message sent: ' + info.response);
     });
 });
+app.get('/', (req, res) => {
+    res.send('Hello World!');
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
