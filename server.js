@@ -7,7 +7,9 @@ require('dotenv').config();
 
 const app = express();
 app.use(bodyParser.json());
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:5173'
+}));
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
