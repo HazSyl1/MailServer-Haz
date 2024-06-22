@@ -11,8 +11,13 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
 const app = express();
 app.use(bodyParser.json());
 
-app.use(cors());
-
+app.use(cors(
+    {
+        origin: ["*"],
+        methods:["POST","GET"],
+        credentials:true
+    }
+));
 mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true
@@ -69,7 +74,7 @@ const isMessageRelevant = async (message) => {
     try {
         const prompt = `Check if the following message is relevant to professional inquiries/ portfolio (project) site/ general talks related to any project or product :\n\nMessage: "${message}"\n\nRelevance (Yes or No):`;
         const result = await model.generateContent(prompt);
-        const response = await result.response;
+        const response = result.response;
         const output = response.text().trim();
         return output.toLowerCase() === 'yes';
     } catch (error) {
