@@ -1,14 +1,23 @@
-// server.js
 const express = require('express');
 const nodemailer = require('nodemailer');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const mongoose = require('mongoose');
 require('dotenv').config();
-
+const Message = require('./models/Message');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const genAI = new GoogleGenerativeAI(process.env.GOOGLEAI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
 const app = express();
 app.use(bodyParser.json());
 
 app.use(cors());
+
+mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+}).then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -18,21 +27,78 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+
 // Middleware to log requests
 app.use((req, res, next) => {
     console.log(`${req.method} request for '${req.url}' - ${JSON.stringify(req.body)}`);
     next();
 });
 
-// Root route for testing
+// Default route
 app.get('/', (req, res) => {
-    res.send('Server is running. You can use /api/contact to send a message.');
+    res.send('Server is running. You can use /contact to send a message.');
 });
 
-// Contact route for form submissions
-app.post('/contact', (req, res) => {
-    const { name, email, message } = req.body;
+app.get('/messages', async (req, res) => {
+    try {
+        const messages = await Message.find();
+        res.status(200).json(messages);
+    } catch (error) {
+        console.error('Error fetching messages:', error);
+        res.status(500).send('Internal Server Error');
+    }
+});
 
+app.put('/messages/:id/star', async (req, res) => {
+    const { id } = req.params;
+    const { starred } = req.body;
+
+    try {
+        const message = await Message.findByIdAndUpdate(id, { starred }, { new: true });
+        if (!message) {
+            return res.status(404).send('Message not found');
+        }
+        res.status(200).json(message);
+    } catch (error) {
+        console.error('Error updating message:', error);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
+const isMessageRelevant = async (message) => {
+    try {
+        const prompt = `Check if the following message is relevant to professional inquiries/ portfolio (project) site/ general talks related to any project or product :\n\nMessage: "${message}"\n\nRelevance (Yes or No):`;
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const output = response.text().trim();
+        return output.toLowerCase() === 'yes';
+    } catch (error) {
+        console.error('Error checking relevancy with GoogleAI:', error);
+        return false;
+    }
+};
+
+
+// Contact route for form submissions
+app.post('/contact', async (req, res) => {
+    const { name, email, message } = req.body;
+    const relevant = await isMessageRelevant(message);
+    const newMessage = new Message({ name, email, message, relevant });
+
+    try {
+        await newMessage.save();
+    } catch (error) {
+        console.error('Error saving message to database:', error);
+        return res.status(500).send('Internal Server Error');
+    }
+
+    if (!relevant) {
+        console.log('Message is not relevant');
+        return res.status(400).send('Message is not relevant');
+    }
+    else{
+        console.log('Message is relevant');
+    }
     const mailOptions = {
         from: {
             name: name, 
